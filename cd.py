@@ -25,9 +25,12 @@ def acd_logreg_l1(X, y, lambd=1e-3, epochs=50, seed=0):
     t_prev = 1.0
     z = X @ w  
     loss_hist = []
-
     def objective():
-        return np.mean(np.log1p(np.exp(-y * z))) + lambd * np.linalg.norm(w, 1)
+        z = X @ w
+        return np.mean(np.log1p(np.exp(z)) - y * z) + lambd * np.linalg.norm(w, 1)
+
+    # def objective():
+    #     return np.mean(np.log1p(np.exp(-y * z))) + lambd * np.linalg.norm(w, 1)
 
     loss_hist.append(objective())
 
@@ -64,8 +67,12 @@ def cd_logreg_l1(X, y, lambd=1e-3, epochs=50, seed=0):
     w = np.zeros(n_features)
     z = X @ w          
     loss_hist = []
+    # def objective():
+    #     return np.mean(np.log1p(np.exp(-y * z))) + lambd * np.linalg.norm(w, 1)
     def objective():
-        return np.mean(np.log1p(np.exp(-y * z))) + lambd * np.linalg.norm(w, 1)
+        z = X @ w
+        return np.mean(np.log1p(np.exp(z)) - y * z) + lambd * np.linalg.norm(w, 1)
+
 
     loss_hist.append(objective())
     for _ in range(epochs):
