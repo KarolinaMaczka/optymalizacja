@@ -1,51 +1,53 @@
 import numpy as np
 
 def sigmoid(z):
-    return 1 / (1 + np.exp(-z))
-
-def logistic_loss(X, y, w):
-    z = X @ w
-    return np.mean(np.log1p(np.exp(-y * z)))
-
-def grad_logistic_loss(X, y, w):
-    z = X @ w
-    s = sigmoid(-y * z)
-    return -(1 / X.shape[0]) * (X.T @ (y * s))
-
-def soft_thresholding(x, lambd):
-    return np.sign(x) * np.maximum(np.abs(x) - lambd, 0)
-
-def compute_lipschitz_constant(X):
-    n_samples = X.shape[0]
-    eigvals = np.linalg.eigvalsh(X.T @ X)
-    L = 0.25 * np.max(eigvals) / n_samples
-    return L
+    pos = z >= 0
+    neg = ~pos
+    out = np.empty_like(z)
+    out[pos] = 1.0 / (1.0 + np.exp(-z[pos]))
+    exp_z = np.exp(z[neg])
+    out[neg] = exp_z / (1.0 + exp_z)
+    return out
 
 
-def fista_logreg_l1(X, y, lambd, epochs=100):
-    n_features = X.shape[1]
+def soft_threshold_vec(x, threshold):
+    return np.sign(x) * np.maximum(np.abs(x) - threshold, 0.0)
+
+
+def fista_logreg_l1(X, y, lambd=1e-3, epochs=100):
+    n_samples, n_features = X.shape
+    y = np.where(y <= 0, -1.0, 1.0)
+
+    # max eigenvalue (1/4 * (X^T *X)) / n
+    L = 0.25 * (np.linalg.norm(X, ord=2) ** 2) / n_samples
+    if L == 0:
+        L = 1e-12  
+
     w = np.zeros(n_features)
-    z = w.copy()
-    t = 1.0
-    L = compute_lipschitz_constant(X)
-    
-    def objective(w):
-        z = X @ w
-        return np.mean(np.log1p(np.exp(-y * z))) + lambd * np.linalg.norm(w, 1)
+    w_prev = w.copy()
+    t_prev = 1.0
 
-    history = []
-    for i in range(epochs):
-        w_old = w.copy()
-        
-        grad = grad_logistic_loss(X, y, z)
-        w = soft_thresholding(z - grad / L, lambd / L)
-        
-        t_new = (1 + np.sqrt(1 + 4 * t ** 2)) / 2
-        z = w + ((t - 1) / t_new) * (w - w_old)
-        t = t_new
-        history.append(objective(w))
+    def objective(w_vec):
+        z_vec = X @ w_vec
+        return np.mean(np.log1p(np.exp(-y * z_vec))) + lambd * np.linalg.norm(
+            w_vec, 1
+        )
 
-    return w, history
+    loss_hist = [objective(w)]
 
+    for _ in range(epochs):
+        t = 0.5 * (1 + np.sqrt(1 + 4 * t_prev ** 2))
+        y_k = w + (t_prev - 1) / t * (w - w_prev)
+
+        z = X @ y_k
+        residual = sigmoid(z) - (y + 1) / 2  
+        grad = X.T @ residual / n_samples
+
+        w_next = soft_threshold_vec(y_k - grad / L, lambd / L)
+
+        w_prev, w, t_prev = w, w_next, t
+        loss_hist.append(objective(w))
+
+    return w, loss_hist
 
 
