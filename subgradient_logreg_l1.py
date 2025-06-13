@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 def sigmoid(z):
     """Numerically stable sigmoid function."""
@@ -54,7 +55,11 @@ def subgradient_logreg_l1(X, y, lambd=1e-3, epochs=100, learning_rate=1e-3,
     
     # Define objective function
     def objective():
-        return np.mean(np.log1p(np.exp(-y * z))) + lambd * np.linalg.norm(w, 1)
+        z = X @ w
+        return np.mean(np.log1p(np.exp(z)) - y * z) + lambd * np.linalg.norm(w, 1)
+
+    # def objective():
+    #     return np.mean(np.log1p(np.exp(-y * z))) + lambd * np.linalg.norm(w, 1)
     
     loss_hist.append(objective())
     
@@ -73,9 +78,13 @@ def subgradient_logreg_l1(X, y, lambd=1e-3, epochs=100, learning_rate=1e-3,
         else:
             raise ValueError(f"Unknown step_type: {step_type}")
         
-        # Compute gradient of logistic loss
-        probs = sigmoid(y * z)
-        grad_loss = -X.T @ ((1 - probs) * y) / n_samples
+        # Compute gradient of logistic loss {-1,1}
+        # probs = sigmoid(y * z)
+        # grad_loss = -X.T @ ((1 - probs) * y) / n_samples
+        
+        # Compute gradient of logistic loss {0, 1}
+        probs = sigmoid(z)  # Probability of class 1
+        grad_loss = X.T @ (probs - y) / n_samples
         
         # Compute subgradient of L1 regularization term (-1, 0, 1)
         subgrad_l1 = np.zeros_like(w)
@@ -83,8 +92,8 @@ def subgradient_logreg_l1(X, y, lambd=1e-3, epochs=100, learning_rate=1e-3,
         # Non-zero weights contribute their sign
         subgrad_l1[nonzero_mask] = np.sign(w[nonzero_mask])
         zero_mask = w == 0
-        # For zero weights, randomly assign a subgradient in [-1, 1]
-        subgrad_l1[zero_mask] = rng.uniform(-1, 1, size=np.sum(zero_mask))
+        # For zero weights, randomly assign a subgradient in {-1, 1}
+        subgrad_l1[zero_mask] = rng.choice([-1, 1], size=np.sum(zero_mask))
         subgrad_l1 = lambd * subgrad_l1
         
         # Full subgradient
@@ -100,3 +109,25 @@ def subgradient_logreg_l1(X, y, lambd=1e-3, epochs=100, learning_rate=1e-3,
         loss_hist.append(objective())
     
     return w, loss_hist
+
+if __name__ == "__main__":
+    # Example usage
+    np.random.seed(0)
+    from sklearn.datasets import load_breast_cancer
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.metrics import accuracy_score
+
+    data = load_breast_cancer()
+    X = StandardScaler().fit_transform(data.data)
+    y = data.target.astype(float)
+    
+    w, loss_hist = subgradient_logreg_l1(X, y, lambd=1e-3, epochs=1000, learning_rate = 1e-2, step_type='constant')
+    
+    plt.plot(loss_hist, label="Subgradient", linestyle="--")
+    plt.xlabel("Epoch")
+    plt.ylabel("Objective")
+    plt.legend()
+    plt.show()
+
+    y_pred_subgrad = (X @ w >= 0).astype(int)
+    print(f"Subgradient Accuracy: {accuracy_score(y, y_pred_subgrad):.3f}")
